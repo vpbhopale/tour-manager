@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Tour Expense Manager — Final (Option B with Charts) — Fixed</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+
+<!-- React UMD -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+
+<!-- Chart.js for charts -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+<!-- html2canvas and jsPDF for screenshot + PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- XLSX for Excel export -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<style>
+:root{
+  --bg:#eefaf3;
+  --card:#ffffffcc;
+  --accent:#0f172a;
+  --muted:#556070;
+  --glass: rgba(255,255,255,0.55);
+  --shadow: 0 10px 30px rgba(15,23,42,0.08);
+}
+*{box-sizing:border-box}
+body{
+  font-family:'Inter',sans-serif;
+  margin:0;
+  background: linear-gradient(180deg,#f0fff6 0%, #e9fbf1 100%);
+  color:var(--accent);
+  min-height:100vh;
+}
+.container{max-width:980px;margin:20px auto;padding:14px}
+.header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.title{display:flex;flex-direction:column}
+h1{margin:0;font-size:22px}
+p.subtitle{margin:0;color:var(--muted);font-size:13px}
+.card{
+  background:var(--card);
+  border-radius:12px;
+  padding:12px;
+  margin-bottom:12px;
+  box-shadow:var(--shadow);
+  transition:transform .12s,box-shadow .12s;
+}
+.card:active{transform:translateY(-2px)}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.col{flex:1 1 220px}
+.input,select,textarea{width:100%;padding:8px;border:1px solid #d1d5db;border-radius:8px;margin-bottom:8px;font-family:inherit}
+button{background:#2563eb;color:white;border:none;padding:9px 12px;border-radius:8px;cursor:pointer;font-weight:600}
+.small{font-size:13px;color:var(--muted)}
+.table{width:100%;border-collapse:collapse;margin-top:8px}
+.table th,.table td{padding:8px;border-bottom:1px solid #e6eef0;text-align:left;font-size:14px}
+.modal-backdrop{position:fixed;inset:0;background:linear-gradient(rgba(255,255,255,0.06), rgba(255,255,255,0.06));backdrop-filter: blur(6px);display:flex;align-items:center;justify-content:center;z-index:60}
+.modal{width:min(720px,94%);background:linear-gradient(180deg, rgba(255,255,255,0.55), rgba(255,255,255,0.45));border-radius:12px;padding:16px;box-shadow:0 12px 40px rgba(15,23,42,0.12);backdrop-filter: blur(10px)}
+.chart-card{display:flex;align-items:center;gap:12px;cursor:pointer;padding:10px;border-radius:10px;background:linear-gradient(180deg,#ffffff,#f7fff9);border:1px solid rgba(0,0,0,0.03)}
+.chart-icon{width:46px;height:46px;border-radius:10px;background:linear-gradient(180deg,#e6fff3,#dcffee);display:flex;align-items:center;justify-content:center;font-weight:700;color:#0b6b3a}
+.footer{text-align:center;color:#475569;font-size:13px;margin-top:18px}
+.validation{color:#b91c1c;font-size:13px;margin-top:6px}
+@media(max-width:900px){ .row{flex-direction:column} .col{flex:1 1 100%} .header{align-items:flex-start} }
+</style>
+
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0f172a">
+
+</head>
+<body>
+<div id="root"></div>
+
+<script>
+document.addEventListener("DOMContentLoaded", ()=> {
+  const e = React.createElement;
+  const Chart = window.Chart;
+  const { jsPDF } = window.jspdf;
+
+  const STORAGE_KEY = "TEM_FINAL_OPTIONB_CHARTS_V1";
+  function uid(){return Math.random().toString(36).slice(2,9);}
+  function saveAll(data){ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }
+  function loadAll(){ try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");}catch{return [];} }
+
+  /* ---------- App ---------- */
+  function App(){
+    const [projects,setProjects] = React.useState(()=> loadAll());
+    const [activeId,setActiveId] = React.useState(null);
+    React.useEffect(()=> saveAll(projects), [projects]);
+
+    function addProject(p){ setProjects(prev=> [...prev,p]); }
+    function updateProject(updated){ setProjects(prev=> prev.map(x=> x.id===updated.id? updated : x)); }
+    function deleteProject(id){ if(confirm("Delete project?")) setProjects(prev=> prev.filter(x=> x.id!==id)); }
+
+    const active = projects.find(p=> p.id===activeId) || null;
+
+    return e("div",{className:"container"},
+      e("div",{className:"header"},
+        e("div",{className:"title"}, e("h1",null,"🌿 Tour Expense Manager"), e("p",{className:"subtitle"},"Multi-project, advanced & precise settlement (Option B)")),
+        e("div",null, active? e("button",{onClick:()=>setActiveId(null)},"Back to Projects") : null)
+      ),
+      !active && e(ProjectList,{projects,addProject,openProject:id=>setActiveId(id),deleteProject}),
+      active && e(ProjectView,{project:active,updateProject,back:()=>setActiveId(null)}),
+      e("div",{className:"footer"},"Project designed by Vaibhav Bhopale")
+    );
+  }
+
+  /* ---------- ProjectList ---------- */
+  function ProjectList({projects,addProject,openProject,deleteProject}){
+    const [name,setName] = React.useState("");
+    const [members,setMembers] = React.useState([]);
+    const [mname,setMname] = React.useState("");
+
+    function addMember(){
+      const nm = (mname||"").trim();
+      if(!nm) return alert("Enter member name");
+      setMembers(prev=> [...prev, { id: uid(), name: nm, advances: [], advance: 0 }]);
+      setMname("");
+    }
+
+    function createProject(){
+      const n = (name||"").trim();
+      if(!n) return alert("Enter project name");
+      if(members.length === 0) return alert("Add at least one member");
+      addProject({ id: uid(), name: n, members, expenses: [], advances: [] });
+      setName(""); setMembers([]);
+    }
+
+    function exportAll(){
+      const blob = new Blob([JSON.stringify(projects)], { type: "application/json" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "tour_projects_all.json"; a.click();
+    }
+
+    function importAll(ev){
+      const f = ev.target.files[0]; if(!f) return;
+      const r = new FileReader();
+      r.onload = e2 => {
+        try{
+          const arr = JSON.parse(e2.target.result);
+          if(!Array.isArray(arr)) return alert("Invalid JSON");
+          arr.forEach(p => addProject(p));
+        }catch(err){ alert("Invalid JSON file"); }
+      };
+      r.readAsText(f);
+    }
+
+    return e("div",null,
+      e("div",{className:"card"},
+        e("h2",null,"Create New Project"),
+        e("label",null,"Project Name"),
+        e("input",{className:"input",value:name,onChange:ev=>setName(ev.target.value),placeholder:"e.g., Goa Trip"}),
+        e("div",{className:"row"},
+          e("div",{className:"col"},
+            e("label",null,"Member Name"),
+            e("input",{className:"input",value:mname,onChange:ev=>setMname(ev.target.value),placeholder:"Type and click Add"}),
+            e("button",{onClick:addMember},"Add Member")
+          ),
+          e("div",{className:"col"},
+            e("label",null,"Members"),
+            e("ul",null,members.map(m=> e("li",{key:m.id}, m.name)))
+          )
+        ),
+        e("div",null, e("button",{onClick:createProject},"Create Project"))
+      ),
+      projects.map(p=> e("div",{key:p.id,className:"card"},
+        e("h3",null,p.name),
+        e("div",null, e("button",{onClick:()=>openProject(p.id)},"Open / Edit"), " ", e("button",{onClick:()=>deleteProject(p.id)},"Delete"))
+      )),
+
+      e("div",{className:"card"},
+        e("h3",null,"Backup / Restore"),
+        e("div",{className:"row"},
+          e("div",{className:"col"}, e("button",{onClick:exportAll},"Export All Projects (JSON)"), e("input",{type:"file", accept:".json", onChange:importAll})),
+          e("div",{className:"col"}, e("small",{className:"small"},"You can export individual projects inside project view."))
+        )
+      )
+    );
+  }
+
+  /* ---------- ProjectView ---------- */
+  function ProjectView({project,updateProject,back}){
+    const [p,setP] = React.useState(()=> deepClone(project));
+    const [showCategoryChart,setShowCategoryChart] = React.useState(false);
+    const [showMemberChart,setShowMemberChart] = React.useState(false);
+    React.useEffect(()=> updateProject(p), [p]);
+
+    function deepClone(x){ return JSON.parse(JSON.stringify(x||{})); }
+
+    function addAdvance(a){
+      if(!a || !a.paidBy || !a.paidTo || !(a.amount>0)) return alert("Invalid advance");
+      setP(prev=>{
+        const np = deepClone(prev);
+        np.advances = np.advances || [];
+        np.advances.push({ id: uid(), paidBy: a.paidBy, paidTo: a.paidTo, amount: a.amount, date: (new Date()).toLocaleDateString() });
+        np.members = (np.members || []).map(m=>{
+          if(m.id === a.paidBy){
+            m.advances = m.advances || [];
+            m.advances.push(a.amount);
+            m.advance = (m.advances || []).reduce((s,v)=> s + (+v||0), 0);
+          }
+          return m;
+        });
+        return np;
+      });
+    }
+
+    function addExpense(exp){
+      if(!exp) return alert("Invalid expense");
+      setP(prev=>{
+        const np = deepClone(prev);
+        np.expenses = np.expenses || [];
+        np.expenses.push(exp);
+        return np;
+      });
+    }
+
+    function deleteExpense(id){
+      if(!confirm("Delete expense?")) return;
+      setP(prev => ({ ...prev, expenses: (prev.expenses||[]).filter(x=>x.id!==id) }));
+    }
+
+    function exportExcel(){
+      try{
+        const wb = XLSX.utils.book_new();
+        const memRows = (p.members||[]).map(m=> ({ Name: m.name, Advance: m.advance||0 }));
+        const expRows = (p.expenses||[]).map(x=> ({ Date: x.date, Description: x.description, Category: x.category, PaidBy: (p.members||[]).find(m=>m.id===x.paidBy)?.name||"", Amount: x.amount }));
+        const advRows = (p.advances||[]).map(a=> ({ Date: a.date, PaidBy: (p.members||[]).find(m=>m.id===a.paidBy)?.name||"", PaidTo: (p.members||[]).find(m=>m.id===a.paidTo)?.name||"", Amount: a.amount }));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(memRows), `${p.name}_Members`.slice(0,31));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(expRows), `${p.name}_Expenses`.slice(0,31));
+        XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(advRows), `${p.name}_Advances`.slice(0,31));
+        XLSX.writeFile(wb, `${p.name.replace(/\s+/g,"_")}_Project.xlsx`);
+      }catch(err){ alert("Export failed: "+err.message); }
+    }
+
+    // Export current project as JSON file
+    function exportJSON_currentProject(){
+      try{
+        const blob = new Blob([JSON.stringify(p, null, 2)], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${p.name.replace(/\s+/g,"_") || "project"}.json`;
+        a.click();
+      }catch(err){ alert("Export JSON failed: " + (err.message || err)); }
+    }
+
+    async function exportPDF(){
+      try{
+        const settlement = computeSettlement(p);
+        const doc = new jsPDF({orientation: "landscape"});
+        doc.setFontSize(14);
+        doc.text(`Tour Expense Manager — Settlement`, 14, 14);
+        doc.setFontSize(11);
+        let y = 24;
+        doc.text(`Project: ${p.name || ""}`, 14, y); y += 8;
+        doc.setFontSize(10);
+        doc.text("Member | Paid | Owed | AdvanceGiven | UsedFromAdvance | FinalNet | Remark", 14, y); y += 6;
+
+        settlement.members.forEach(m=>{
+          const line = `${m.name} | ${m.paid.toFixed(2)} | ${m.owed.toFixed(2)} | ${m.totalAdvanceGiven.toFixed(2)} | ${m.usedFromAdvance.toFixed(2)} | ${m.finalNet.toFixed(2)} | ${shorten(settlement.remarks[m.id]||"")}`;
+          const parts = doc.splitTextToSize(line, 270);
+          parts.forEach(pLine=>{ doc.text(pLine, 14, y); y+=6; if(y>180){ doc.addPage(); y=14; }});
+        });
+
+        // Prepare transfers HTML (attach to DOM temporarily for html2canvas to compute fonts/styles)
+        const transfersHtml = document.createElement("div");
+        transfersHtml.style.padding = "10px";
+        transfersHtml.style.fontFamily = "Inter, Arial, sans-serif";
+        transfersHtml.style.width = "720px";
+        transfersHtml.style.background = "#fff";
+        transfersHtml.innerHTML = `<h3>Transfers</h3>`;
+        if((settlement.transactions || []).length === 0){
+          const pEl = document.createElement("p"); pEl.textContent = "No transfers required.";
+          transfersHtml.appendChild(pEl);
+        } else {
+          const ul = document.createElement("ul");
+          (settlement.transactions || []).forEach(t=>{
+            const li = document.createElement("li");
+            if(t.type === "advance_return") li.textContent = `${t.from} returns ₹${t.amount.toFixed(2)} to ${t.to} (unused advance)`;
+            else if(t.type === "advance_deficit") li.textContent = `${t.from} pays ₹${t.amount.toFixed(2)} to ${t.to} (advance shortfall)`;
+            else li.textContent = `${t.from} → ${t.to}: ₹${t.amount.toFixed(2)}`;
+            ul.appendChild(li);
+          });
+          transfersHtml.appendChild(ul);
+        }
+
+        // attach to body offscreen
+        transfersHtml.style.position = "fixed";
+        transfersHtml.style.left = "-9999px";
+        document.body.appendChild(transfersHtml);
+        const canvas = await html2canvas(transfersHtml, { scale: 2 });
+        document.body.removeChild(transfersHtml);
+
+        const imgData = canvas.toDataURL("image/png");
+        doc.addPage();
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const margin = 10;
+        const imgW = pageWidth - margin*2;
+        const imgH = (canvas.height / canvas.width) * imgW;
+        doc.addImage(imgData, "PNG", margin, 10, imgW, imgH);
+        doc.save(`${p.name.replace(/\s+/g,"_") || "project"}_settlement.pdf`);
+      }catch(err){
+        alert("PDF failed: " + (err && err.message ? err.message : err));
+      }
+    }
+
+    // helper to shorten long remarks for PDF
+    function shorten(s){
+      if(!s) return "";
+      if(s.length <= 80) return s;
+      return s.slice(0,77) + "...";
+    }
+
+    // render
+    return e("div",null,
+      e("div",{className:"card",style:{display:"flex",alignItems:"center",justifyContent:"space-between"}},
+        e("div",null,e("h2",null,p.name), e("div",{className:"small"}, `${(p.members||[]).length} members — Expenses: ${(p.expenses||[]).length}`)),
+        e("div",{style:{display:"flex",gap:8}},
+          e("button",{onClick:back},"← Projects"),
+          e("button",{onClick:exportExcel},"Export Excel"),
+          e("button",{onClick:exportJSON_currentProject},"Export JSON"),
+          e("button",{onClick:exportPDF},"Export PDF")
+        )
+      ),
+      e("div",{className:"row"},
+        e("div",{className:"col"},
+          e(MemberTable,{p})
+        ),
+        e("div",{className:"col"},
+          e("div",{className:"card"},
+            e("h3",null,"Charts"),
+            e("div",{className:"row"},
+              e("div",{className:"chart-card", onClick:()=>setShowCategoryChart(true), role:"button", tabIndex:0},
+                e("div",{className:"chart-icon"},"C"),
+                e("div",null,e("strong",null,"Category Chart"), e("div",{className:"small"},"Click to open category-wise pie chart"))
+              ),
+              e("div",{className:"chart-card", onClick:()=>setShowMemberChart(true), role:"button", tabIndex:0},
+                e("div",{className:"chart-icon"},"M"),
+                e("div",null,e("strong",null,"Member Chart"), e("div",{className:"small"},"Click to open member-wise owed pie chart"))
+              )
+            )
+          )
+        )
+      ),
+      e("div",null,
+        e(AdvanceForm,{members: p.members||[], onAdd: addAdvance}),
+        e(ExpenseForm,{members: p.members||[], onAdd: addExpense})
+      ),
+      e(ExpenseList,{p, onDelete: deleteExpense}),
+      e(TotalCard,{p}),
+      e(SettlementPanel,{p}),
+      // Chart modals
+      showCategoryChart && e(ChartsModal,{p, type:"category", onClose:()=>setShowCategoryChart(false)}),
+      showMemberChart && e(ChartsModal,{p, type:"member", onClose:()=>setShowMemberChart(false)})
+    );
+  }
+
+  /* ---------- MemberTable ---------- */
+  function MemberTable({p}){
+    const members = p.members || [];
+    function calcBalance(id){
+      let paid = 0, owed = 0;
+      (p.expenses||[]).forEach(ex=>{ if(ex.paidBy===id) paid += +ex.amount||0; owed += +(ex.splits && ex.splits[id] || 0); });
+      const m = members.find(mm=>mm.id===id) || { advance:0 };
+      const adv = +(m.advance||0);
+      return (paid + adv - owed);
+    }
+    return e("div",{className:"card"},
+      e("h3",null,"Members & Balances"),
+      e("table",{className:"table"},
+        e("thead",null, e("tr",null, e("th",null,"Member"), e("th",null,"Total Advance"), e("th",null,"Net Balance"))),
+        e("tbody",null, members.map(m=> e("tr",{key:m.id}, e("td",null,m.name), e("td",null,(m.advance||0).toFixed(2)), e("td",null, calcBalance(m.id).toFixed(2)) )))
+      )
+    );
+  }
+
+  /* ---------- AdvanceForm ---------- */
+  function AdvanceForm({members, onAdd}){
+    const [paidBy,setPaidBy] = React.useState(members[0]?.id || "");
+    const [paidTo,setPaidTo] = React.useState(members[0]?.id || "");
+    const [amt,setAmt] = React.useState("");
+
+    React.useEffect(()=> {
+      if(members.length){
+        if(!members.find(m=>m.id===paidBy)) setPaidBy(members[0].id);
+        if(!members.find(m=>m.id===paidTo)) setPaidTo(members[0].id);
+      }
+    }, [members]);
+
+    function submit(){
+      const amount = parseFloat(amt);
+      if(!paidBy || !paidTo) return alert("Select Paid By / Paid To");
+      if(!amount || amount <= 0) return alert("Enter valid amount");
+      onAdd({ paidBy, paidTo, amount });
+      setAmt("");
+    }
+
+    return e("div",{className:"card"},
+      e("h3",null,"Add Advance (Paid By → Paid To)"),
+      e("div",{className:"row"},
+        e("div",{className:"col"}, e("label",null,"Paid By"), e("select",{className:"input",value:paidBy,onChange:ev=>setPaidBy(ev.target.value)}, members.map(m=> e("option",{key:m.id,value:m.id}, m.name)))),
+        e("div",{className:"col"}, e("label",null,"Paid To"), e("select",{className:"input",value:paidTo,onChange:ev=>setPaidTo(ev.target.value)}, members.map(m=> e("option",{key:m.id,value:m.id}, m.name))))
+      ),
+      e("label",null,"Amount"), e("input",{className:"input",type:"number", value:amt, onChange:ev=>setAmt(ev.target.value)}),
+      e("div",null, e("button",{onClick:submit},"Add Advance"))
+    );
+  }
+
+  /* ---------- ExpenseForm ---------- */
+  function ExpenseForm({members, onAdd}){
+    const [date,setDate] = React.useState(new Date().toISOString().slice(0,10));
+    const [desc,setDesc] = React.useState("");
+    const [category,setCategory] = React.useState("Food");
+    const [otherCat,setOtherCat] = React.useState("");
+    const [paidBy,setPaidBy] = React.useState(members[0]?.id || "");
+    const [amount,setAmount] = React.useState("");
+    const [splitType,setSplitType] = React.useState("Equal");
+    const [custom,setCustom] = React.useState({});
+    const [validation,setValidation] = React.useState("");
+
+    React.useEffect(()=> { if(members.length && !members.find(m=>m.id===paidBy)) setPaidBy(members[0].id); }, [members]);
+
+    function setCustomVal(id,val){ setCustom(prev=> ({...prev, [id]: +(val||0)})); }
+
+    function submit(){
+      setValidation("");
+      const amt = parseFloat(amount);
+      const cat = (category === "Other") ? (otherCat||"").trim() : category;
+      if(!date || !desc.trim() || !cat || !paidBy || !(amt > 0)){
+        setValidation("Please enter all fields");
+        return;
+      }
+      let splits = {};
+      if(splitType === "Equal"){
+        const per = +(amt / (members.length||1)).toFixed(2);
+        members.forEach(m=> splits[m.id] = per);
+      } else {
+        const sum = members.reduce((s,m)=> s + ((custom[m.id]||0)), 0);
+        if(Math.abs(sum - amt) > 0.01){
+          setValidation(`Custom splits must total ${amt.toFixed(2)} (current ${sum.toFixed(2)})`);
+          return;
+        }
+        members.forEach(m=> splits[m.id] = +(custom[m.id]||0));
+      }
+
+      const exp = { id: uid(), date, description: desc.trim(), category: cat, paidBy, amount: amt, splitType, splits };
+      onAdd(exp);
+      setDesc(""); setAmount(""); setCategory("Food"); setOtherCat(""); setSplitType("Equal"); setCustom({}); setValidation("");
+      setDate(new Date().toISOString().slice(0,10));
+    }
+
+    return e("div",{className:"card"},
+      e("h3",null,"Add Expense"),
+      e("div",{className:"row"},
+        e("div",{className:"col"}, e("label",null,"Date"), e("input",{className:"input",type:"date", value:date, onChange:ev=>setDate(ev.target.value)})),
+        e("div",{className:"col"}, e("label",null,"Amount"), e("input",{className:"input",type:"number", value:amount, onChange:ev=>setAmount(ev.target.value)}))
+      ),
+      e("label",null,"Description"), e("input",{className:"input",value:desc,onChange:ev=>setDesc(ev.target.value)}),
+      e("label",null,"Category"),
+      e("select",{className:"input",value:category,onChange:ev=>setCategory(ev.target.value)},
+        e("option",{value:"Food"},"Food"),
+        e("option",{value:"Fuel"},"Fuel"),
+        e("option",{value:"Travel"},"Travel"),
+        e("option",{value:"Accommodation"},"Accommodation"),
+        e("option",{value:"Sport"},"Sport"),
+        e("option",{value:"Other"},"Other")
+      ),
+      category==="Other" && e("input",{className:"input",placeholder:"Specify category", value:otherCat, onChange:ev=>setOtherCat(ev.target.value)}),
+      e("label",null,"Paid By"),
+      e("select",{className:"input",value:paidBy,onChange:ev=>setPaidBy(ev.target.value)}, members.map(m=> e("option",{key:m.id,value:m.id}, m.name)) ),
+      e("label",null,"Split Type"),
+      e("select",{className:"input",value:splitType,onChange:ev=>setSplitType(ev.target.value)}, e("option",{value:"Equal"},"Equally"), e("option",{value:"Custom"},"Custom")),
+      splitType==="Custom" && e("div",null,
+        e("small",{className:"small"},"Enter each member's share (sum must equal Amount)"),
+        members.map(m=> e("div",{key:m.id,className:"row"}, e("div",{className:"col"}, e("label",null,m.name), e("input",{className:"input",type:"number", value:(custom[m.id]===undefined? "": custom[m.id]), onChange:ev=>setCustomVal(m.id, ev.target.value)})) ))
+      ),
+      e("div",null, e("button",{onClick:submit},"Add Expense"), validation && e("div",{className:"validation"}, validation))
+    );
+  }
+
+  /* ---------- ExpenseList ---------- */
+  function ExpenseList({p, onDelete}){
+    const ex = p.expenses || [];
+    return e("div",{className:"card"},
+      e("h3",null,"Expenses"),
+      e("table",{className:"table"},
+        e("thead",null, e("tr",null, e("th",null,"Date"), e("th",null,"Description"), e("th",null,"Category"), e("th",null,"Paid By"), e("th",null,"Amount"), e("th",null,"Action"))),
+        e("tbody", null, ex.map(x=> e("tr",{key:x.id}, e("td",null,x.date), e("td",null,x.description), e("td",null,x.category), e("td",null,(p.members||[]).find(m=>m.id===x.paidBy)?.name||""), e("td",null,(x.amount||0).toFixed(2)), e("td",null,e("button",{onClick:()=>onDelete(x.id)},"Delete")) )))
+      )
+    );
+  }
+
+  /* ---------- TotalCard ---------- */
+  function TotalCard({p}){
+    const total = (p.expenses||[]).reduce((s,x)=> s + (+x.amount||0), 0);
+    return e("div",{className:"card"}, e("h3",null,"Total Expenditure"), e("div",null, `₹ ${total.toFixed(2)}`) );
+  }
+
+  /* ---------- Settlement core Option B combined ---------- */
+  function computeSettlement(p){
+    // Compute per-member paid and owed
+    const members = (p.members||[]).map(m=>{
+      let paid = 0, owed = 0;
+      (p.expenses||[]).forEach(ex=>{ if(ex.paidBy===m.id) paid += +ex.amount||0; owed += +(ex.splits && ex.splits[m.id] || 0); });
+      return { id: m.id, name: m.name, paid: +paid, owed: +owed, advance: +(m.advance||0) };
+    });
+
+    // Combine advances per payer|receiver
+    const advMap = {};
+    (p.advances||[]).forEach(a=>{
+      if(!a || !a.paidBy || !a.paidTo) return;
+      const k = `${a.paidBy}|${a.paidTo}`;
+      advMap[k] = (advMap[k] || 0) + (+a.amount || 0);
+    });
+
+    const memberInfo = {};
+    members.forEach(m=> memberInfo[m.id] = { ...m, totalAdvanceGiven:0, usedFromAdvance:0, finalNet:0 });
+
+    Object.keys(advMap).forEach(k=>{
+      const [payer, receiver] = k.split("|");
+      memberInfo[payer].totalAdvanceGiven = (memberInfo[payer].totalAdvanceGiven || 0) + advMap[k];
+    });
+
+    const transactions = [];
+
+    // For each combined advance (payer->receiver)
+    Object.keys(advMap).forEach(k=>{
+      const [payer, receiver] = k.split("|");
+      const totalGiven = +(advMap[k] || 0);
+      const receiverOwed = (memberInfo[receiver] && memberInfo[receiver].owed) || 0;
+      const used = +Math.min(totalGiven, receiverOwed).toFixed(2);
+      memberInfo[payer].usedFromAdvance = (memberInfo[payer].usedFromAdvance || 0) + used;
+      const remaining = +(totalGiven - receiverOwed).toFixed(2);
+      if(remaining > 0.009){
+        const pname = (p.members||[]).find(x=>x.id===payer)?.name || payer;
+        const rname = (p.members||[]).find(x=>x.id===receiver)?.name || receiver;
+        transactions.push({ type: "advance_return", fromId: receiver, from: rname, toId: payer, to: pname, amount: remaining });
+      } else if(remaining < -0.009){
+        const deficit = Math.abs(remaining);
+        const pname = (p.members||[]).find(x=>x.id===payer)?.name || payer;
+        const rname = (p.members||[]).find(x=>x.id===receiver)?.name || receiver;
+        transactions.push({ type: "advance_deficit", fromId: payer, from: pname, toId: receiver, to: rname, amount: deficit });
+      }
+    });
+
+    // finalNet for each member
+    Object.keys(memberInfo).forEach(id=>{
+      const mi = memberInfo[id];
+      mi.finalNet = +((mi.paid || 0) + (mi.usedFromAdvance || 0) - (mi.owed || 0)).toFixed(2);
+    });
+
+    // greedy settlement among finalNet
+    const finals = Object.values(memberInfo).map(x=> ({ ...x }));
+    const receivers = finals.filter(m=> m.finalNet > 0).sort((a,b)=> b.finalNet - a.finalNet);
+    const payers = finals.filter(m=> m.finalNet < 0).sort((a,b)=> a.finalNet - b.finalNet);
+    let i=0,j=0;
+    while(i < receivers.length && j < payers.length){
+      const rAmt = receivers[i].finalNet;
+      const pAmt = Math.abs(payers[j].finalNet);
+      const t = Math.min(rAmt, pAmt);
+      if(t <= 0.005) break;
+      transactions.push({ type: "settlement", fromId: payers[j].id, from: payers[j].name, toId: receivers[i].id, to: receivers[i].name, amount: +t.toFixed(2) });
+      receivers[i].finalNet = +(receivers[i].finalNet - t).toFixed(2);
+      payers[j].finalNet = +(payers[j].finalNet + t).toFixed(2);
+      if(receivers[i].finalNet < 0.01) i++;
+      if(payers[j].finalNet > -0.01) j++;
+    }
+
+    // remarks
+    const remarks = {};
+    Object.values(memberInfo).forEach(mi=>{
+      const parts = [];
+      parts.push(`Advance Given: ₹${(mi.totalAdvanceGiven||0).toFixed(2)}`);
+      parts.push(`UsedFromAdvance: ₹${(mi.usedFromAdvance||0).toFixed(2)}`);
+      parts.push(`Net: ₹${(mi.finalNet||0).toFixed(2)}`);
+      const related = transactions.filter(t=> t.fromId === mi.id || t.toId === mi.id);
+      if(related.length){
+        related.forEach(t=>{
+          if(t.type === "advance_return"){
+            if(t.fromId === mi.id) parts.push(`${t.from} returns ₹${t.amount.toFixed(2)} to ${t.to} (unused advance)`);
+            if(t.toId === mi.id) parts.push(`${t.to} will receive ₹${t.amount.toFixed(2)} from ${t.from} (unused advance)`);
+          } else if(t.type === "advance_deficit"){
+            if(t.fromId === mi.id) parts.push(`${t.from} pays ₹${t.amount.toFixed(2)} to ${t.to} (advance shortfall)`);
+            if(t.toId === mi.id) parts.push(`${t.to} will receive ₹${t.amount.toFixed(2)} from ${t.from} (advance shortfall)`);
+          } else if(t.type === "settlement"){
+            if(t.fromId === mi.id) parts.push(`Pays ₹${t.amount.toFixed(2)} to ${t.to}`);
+            if(t.toId === mi.id) parts.push(`Receives ₹${t.amount.toFixed(2)} from ${t.from}`);
+          }
+        });
+      } else {
+        if(Math.abs(mi.finalNet) < 0.01) parts.push("Settled");
+      }
+      remarks[mi.id] = parts.join(" | ");
+    });
+
+    const resultMembers = Object.values(memberInfo).map(x=> ({
+      id:x.id, name:x.name, paid:+x.paid, owed:+x.owed, totalAdvanceGiven:+(x.totalAdvanceGiven||0), usedFromAdvance:+(x.usedFromAdvance||0), finalNet:+(x.finalNet||0)
+    }));
+
+    return { members: resultMembers, transactions, remarks };
+  }
+
+  /* ---------- SettlementPanel (renders transfers) ---------- */
+  function SettlementPanel({p}){
+    const res = computeSettlement(p);
+    return e("div",{className:"card", id:"settlement-area"},
+      e("h3",null,"Settlement Summary"),
+      e("table",{className:"table"},
+        e("thead",null,e("tr",null,e("th",null,"Member"),e("th",null,"Paid"),e("th",null,"Owed"),e("th",null,"Advance Given"),e("th",null,"UsedFromAdvance"),e("th",null,"FinalNet"),e("th",null,"Remark"))),
+        e("tbody",null,res.members.map(m=> e("tr",{key:m.id}, e("td",null,m.name), e("td",null,m.paid.toFixed(2)), e("td",null,m.owed.toFixed(2)), e("td",null,m.totalAdvanceGiven.toFixed(2)), e("td",null,m.usedFromAdvance.toFixed(2)), e("td",null,m.finalNet.toFixed(2)), e("td",null,res.remarks[m.id]||"Settled"))))
+      ),
+      e("div",{style:{marginTop:8}},
+        res.transactions.length ? e("div",null, e("strong",null,"Transfers:"), e("ul",null, res.transactions.map((t,i)=> e("li",{key:i}, t.type==="advance_return" ? `${t.from} returns ₹${t.amount.toFixed(2)} to ${t.to} (unused advance)` : t.type==="advance_deficit" ? `${t.from} pays ₹${t.amount.toFixed(2)} to ${t.to} (advance shortfall)` : `${t.from} → ${t.to}: ₹${t.amount.toFixed(2)}` )))) : e("p",null,"All settled — no transfers needed.")
+      )
+    );
+  }
+
+  /* ---------- Modal + Charts ---------- */
+  function Modal({onClose, title, children}){
+    return e("div",{className:"modal-backdrop", onClick: (ev)=> { if(ev.target.className && ev.target.className.indexOf('modal-backdrop')>=0) onClose(); }},
+      e("div",{className:"modal"},
+        e("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
+          e("h3",null,title),
+          e("button",{onClick:onClose},"Close")
+        ),
+        children
+      )
+    );
+  }
+
+  function ChartsModal({p, type, onClose}){
+    const canvasRef = React.useRef(null);
+    React.useEffect(()=> {
+      if(!canvasRef.current) return;
+      // prepare data
+      if(type === "category"){
+        const sums = {};
+        (p.expenses||[]).forEach(x=> { sums[x.category] = (sums[x.category]||0) + (+x.amount||0); });
+        const labels = Object.keys(sums);
+        const data = labels.map(l=> sums[l]);
+        createPie(canvasRef.current, labels, data, "Category-wise Expenditure");
+      } else {
+        const owedMap = {};
+        (p.members||[]).forEach(m=> owedMap[m.name] = 0);
+        (p.expenses||[]).forEach(ex=>{
+          Object.keys(ex.splits||{}).forEach(id=>{
+            const m = (p.members||[]).find(mm=>mm.id===id);
+            if(m) owedMap[m.name] = (owedMap[m.name]||0) + (+ex.splits[id] || 0);
+          });
+        });
+        const labels = Object.keys(owedMap);
+        const data = labels.map(l=> owedMap[l]);
+        createPie(canvasRef.current, labels, data, "Member-wise Owed (Expenditure)");
+      }
+      return ()=> { if(canvasRef.current && canvasRef.current.__chart){ try{ canvasRef.current.__chart.destroy(); }catch{} } };
+    }, [p, type]);
+
+    return e(Modal,{onClose, title: type==="category"? "Category Chart": "Member Chart"},
+      e("div",null, e("canvas",{ref:canvasRef, width:640, height:320}))
+    );
+  }
+
+  // createPie uses Chart.js
+  function createPie(canvas, labels, data, title){
+    if(canvas.__chart) { try{ canvas.__chart.destroy(); }catch{} }
+    const colors = labels.map((_,i)=> {
+      const hue = Math.round((i*47) % 360);
+      return `hsl(${hue} 60% 60%)`;
+    });
+    canvas.__chart = new Chart(canvas, {
+      type: "pie",
+      data: { labels, datasets: [{ data, backgroundColor: colors }]},
+      options: { plugins: { title: { display: true, text: title } } }
+    });
+  }
+
+  /* ---------- Mount App ---------- */
+  ReactDOM.createRoot(document.getElementById("root")).render(e(App));
+});
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js')
+      .then(reg => console.log('SW registered', reg))
+      .catch(err => console.warn('SW registration failed', err));
+  });
+}
+</script>
+
+</body>
+</html>
